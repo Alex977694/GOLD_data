@@ -85,13 +85,10 @@ def receive_indicators(
         "received_at": record["received_at"],
     }
 
-
 @app.get("/api/indicators")
 def get_indicators(
-    x_api_key: str | None = Header(default=None),
+    # check_api_key(x_api_key) -> Энэ мөрийг хасчихвал GET хүсэлт 401 өгөхгүй нээгдэнэ
 ):
-    check_api_key(x_api_key)
-
     with _lock:
         if _latest_data is None:
             return {
