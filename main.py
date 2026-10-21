@@ -7,6 +7,9 @@ from typing import List, Optional
 
 app = FastAPI()
 
+# Энэ нь хөтөч /JS/style.css эсвэл /JS/Metachart.js гэж асуухад server дээрх JS хавтаснаас олж өгөх үүрэгтэй.
+app.mount("/JS", StaticFiles(directory="JS"), name="JS")
+
 # Санах ойд дээд тал нь 10,000 лаа хадгалах
 MAX_CANDLES = 10000
 gold_candles = deque(maxlen=MAX_CANDLES)
