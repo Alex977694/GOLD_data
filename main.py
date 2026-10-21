@@ -2,6 +2,7 @@ import os
 from collections import deque
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles  # <-- 1. Энийг импортлоно
 from pydantic import BaseModel
 from typing import List, Optional
 
