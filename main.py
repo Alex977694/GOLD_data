@@ -31,14 +31,12 @@ class CandlePayload(BaseModel):
 # 1. Chart харуулах хуудас: /goldchart
 @app.get("/goldchart", response_class=HTMLResponse)
 async def get_gold_chart():
-    # Та өөрийнхөө эхэнд бичсэн index.html кодоо энд шууд буцааж болно 
-    # Эсвэл HTML файлаа templates хавтсанд хийж болно. Энд шууд HTML string-ээр эсвэл уншуулж болно.
     # Жишээ нь HTML файлыг шууд уншиж харуулах бол:
     try:
-        with open("index.html", "r", encoding="utf-8") as f:
+        with open("gold_chart.html", "r", encoding="utf-8") as f:
             return f.read()
     except FileNotFoundError:
-        return "<h3>index.html not found on server! Please check file path.</h3>"
+        return "<h3>gold_chart.html not found on server! Please check file path.</h3>"
 
 
 # 2. Bridge-ээс лааны өгөгдөл хүлээж авах эндпоинт (POST)
