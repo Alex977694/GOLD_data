@@ -1,67 +1,90 @@
 import os
 from collections import deque
-from flask import Flask, request, jsonify
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+from typing import List, Optional
 
-app = Flask(__name__)
+app = FastAPI()
 
-# Санах ойд дээд тал нь 10,000 лаа хадгална (Хамгийн хуучин нь автоматаар хасагдана)
+# Санах ойд дээд тал нь 10,000 лаа хадгалах
 MAX_CANDLES = 10000
 gold_candles = deque(maxlen=MAX_CANDLES)
 
-@app.route('/update_candles', methods=['POST'])
-def update_candles():
+# Bridge-ээс ирэх өгөгдлийн бүтэц (Pydantic model)
+class CandleItem(BaseModel):
+    open_time: int
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    bid: Optional[float] = None
+    ask: Optional[float] = None
+
+class CandlePayload(BaseModel):
+    symbol: str
+    full_snapshot: bool = False
+    candles: List[CandleItem]
+
+
+# 1. Chart харуулах хуудас: /goldchart
+@app.get("/goldchart", response_class=HTMLResponse)
+async def get_gold_chart():
+    # Та өөрийнхөө эхэнд бичсэн index.html кодоо энд шууд буцааж болно 
+    # Эсвэл HTML файлаа templates хавтсанд хийж болно. Энд шууд HTML string-ээр эсвэл уншуулж болно.
+    # Жишээ нь HTML файлыг шууд уншиж харуулах бол:
+    try:
+        with open("index.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return "<h3>index.html not found on server! Please check file path.</h3>"
+
+
+# 2. Bridge-ээс лааны өгөгдөл хүлээж авах эндпоинт (POST)
+@app.post("/update_candles")
+async def update_candles(payload: CandlePayload):
     global gold_candles
-    data = request.json
-    if not data or "candles" not in data:
-        return jsonify({"status": "error", "message": "No candle data provided"}), 400
+    
+    if not payload.candles:
+        return {"status": "ok", "total": len(gold_candles)}
 
-    incoming_candles = data.get("candles", [])
-    is_snapshot = data.get("full_snapshot", False)
-
-    if not incoming_candles:
-        return jsonify({"status": "ok", "count": len(gold_candles)})
-
-    # 1. Анхны 10,000 лааны snapshot ирвэл шууд deque-г шинэчлэх
-    if is_snapshot:
+    # Snapshot буюу анхны 10,000 лааг бүтнээр нь авах үед
+    if payload.full_snapshot:
         gold_candles.clear()
-        for c in incoming_candles:
-            gold_candles.append(c)
+        for c in payload.candles:
+            gold_candles.append(c.dict())
         print(f"[BOOTSTRAP] Loaded initial {len(gold_candles)} candles.")
     
-    # 2. Секунд/минут тутамд сүүлийн 1 лааны шинэчлэлт ирэх үед
+    # Секунд/минут тутамд шинэ лаа эсвэл одоогийн формирубч байгаа лааг шинэчлэх
     else:
-        for c in incoming_candles:
+        for c in payload.candles:
+            c_dict = c.dict()
             if not gold_candles:
-                gold_candles.append(c)
+                gold_candles.append(c_dict)
                 continue
 
-            # Хэрэв open_time нь ижил байвал формирубч байгаа сүүлийн лааг update хийнэ
-            if gold_candles[-1]["open_time"] == c["open_time"]:
-                gold_candles[-1] = c
-            # Хэрэв шинэ минут эхэлж open_time нь их болсон байвал шинэ лаа болгож араас нь залгана
-            elif c["open_time"] > gold_candles[-1]["open_time"]:
-                gold_candles.append(c)
+            # Хэрэв open_time нь ижил бол одоо явж байгаа лааг шинэчилнэ (update)
+            if gold_candles[-1]["open_time"] == c_dict["open_time"]:
+                gold_candles[-1] = c_dict
+            # Шинэ минут эхэлсэн бол араас нь залгана (append)
+            elif c_dict["open_time"] > gold_candles[-1]["open_time"]:
+                gold_candles.append(c_dict)
 
-    return jsonify({"status": "success", "total_candles": len(gold_candles)}), 200
+    return {"status": "success", "total_candles": len(gold_candles)}
 
 
-@app.route('/candles/GOLD', methods=['GET'])
-def get_gold_candles():
-    """ Metachart.js-ийн fetch(`/candles/GOLD?interval=1`) х хүсэлтэд хариулах эндпоинт """
-    # Metachart.js [time_ms, open, high, low, close, volume] хэлбэртэй массив хүлээдэг
+# 3. JS Chart руу лааны мэдээлэл өгөх эндпоинт (GET)
+@app.get("/candles/GOLD")
+async def get_gold_candles():
     formatted = []
     for c in list(gold_candles):
         formatted.append([
-            c["open_time"] * 1000, # seconds -> milliseconds
+            c["open_time"] * 1000,  # seconds -> milliseconds (JS chart-д зориулж)
             c["open"],
             c["high"],
             c["low"],
             c["close"],
             c["volume"]
         ])
-    return jsonify({"candles": formatted})
-
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    return {"candles": formatted}
